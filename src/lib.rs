@@ -12,6 +12,7 @@ pub fn run(listener: TcpListener) -> Result<Server, std::io::Error> {
             .route("/", web::get().to(greet))
             .route("/{name}", web::get().to(greet))
             .route("/health_check", web::get().to(health_check))
+            .route("/subscriptions", web::post().to(subscribe))
     })
     .listen(listener)?
     .run();
@@ -26,4 +27,14 @@ async fn greet(req: HttpRequest) -> impl Responder {
 
 async fn health_check() -> impl Responder {
     HttpResponse::Ok()
+}
+
+#[derive(serde::Deserialize)]
+struct FromData {
+    name: String,
+    email: String,
+}
+
+async fn subscribe(_form: web::Form<FromData>) -> HttpResponse {
+    HttpResponse::Ok().finish()
 }
