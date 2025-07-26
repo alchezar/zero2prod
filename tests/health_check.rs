@@ -13,10 +13,10 @@ fn spawn_app() -> String {
     let _ = tokio::spawn(server);
 
     // We return the application address to the caller!
-    format!("localhost:{}", port)
+    format!("http://localhost:{}", port)
 }
 
-/// `tokio::test`1 is the testing equivalent of `tokio::main`.
+/// `tokio::test` is the testing equivalent of `tokio::main`.
 /// It also spares you from having to specify the `#[test]` attribute
 ///
 /// You can inspect what code gets generated using
@@ -36,5 +36,9 @@ async fn health_check_works() {
 
     // Assert
     assert!(response.status().is_success());
-    assert_eq!(response.content_length(), Some(19))
+    assert_eq!(response.content_length(), Some(19));
+    assert_eq!(
+        response.text().await.unwrap(),
+        "Hello health_check!".to_string()
+    );
 }
