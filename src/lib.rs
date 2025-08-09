@@ -2,9 +2,12 @@
 
 //! lib.rs
 
-pub mod configurations;
-pub mod routes;
-pub mod startup;
+pub mod lib {
+    pub mod configurations;
+    pub mod routes;
+    pub mod startup;
+    pub mod telemetry;
+}
 
 use actix_web::{HttpRequest, Responder};
 

@@ -2,11 +2,24 @@
 
 //! tests/health_check.rc
 
+use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use std::net::TcpListener;
 use uuid::Uuid;
-use zero2prod::configurations::{DatabaseSettings, get_configuration};
-use zero2prod::startup::run;
+use zero2prod::lib::configurations::{DatabaseSettings, get_configuration};
+use zero2prod::lib::startup::run;
+use zero2prod::lib::telemetry::{get_subscriber, init_subscriber};
+
+// Ensure that the `tracing` stack is noly initialised once using `once_cell`.
+static TRACING: Lazy<()> = Lazy::new(|| {
+    if std::env::var("TEST_LOG").is_ok() {
+        let subscriber = get_subscriber("zero2prod".into(), "debug".into(), std::io::stdout);
+        init_subscriber(subscriber);
+    } else {
+        let subscriber = get_subscriber("zero2prod".into(), "debug".into(), std::io::sink);
+        init_subscriber(subscriber);
+    };
+});
 
 pub struct TestApp {
     pub address: String,
@@ -14,6 +27,10 @@ pub struct TestApp {
 }
 
 async fn spawn_app() -> TestApp {
+    // The first time `initialize` is invoked the code in `Tracing` is executed.
+    // Al other invocations will
+    Lazy::force(&TRACING);
+
     let listener = TcpListener::bind("localhost:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://localhost:{}", port);
