@@ -2,7 +2,6 @@
 
 //! main.rs
 
-use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
 use zero2prod::lib::configurations::get_configuration;

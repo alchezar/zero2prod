@@ -1,5 +1,6 @@
 ﻿// IKinder
 
+use crate::lib::domain::{NewSubscriber, SubscriberName};
 use actix_web::{HttpResponse, web};
 use chrono::Utc;
 use sqlx::PgPool;
@@ -17,7 +18,12 @@ pub struct FromData {
 		subscriber_email = %form.email,
 		subscriber_name = %form.name))]
 pub async fn subscribe(form: web::Form<FromData>, pool: web::Data<PgPool>) -> HttpResponse {
-    match insert_subscriber(&form, &pool).await {
+    let new_subscriber = NewSubscriber {
+        email: form.0.email,
+        name: SubscriberName::parse(&form.0.name),
+    };
+
+    match insert_subscriber(&new_subscriber, &pool).await {
         Ok(_) => HttpResponse::Ok().finish(),
         Err(e) => {
             tracing::error!("Failed to execute query: {:?}", e);
@@ -28,17 +34,20 @@ pub async fn subscribe(form: web::Form<FromData>, pool: web::Data<PgPool>) -> Ht
 
 #[tracing::instrument(
     name = "Saving new subscriber details in the database",
-    skip(form, pool)
+    skip(new_subscriber, pool)
 )]
-pub async fn insert_subscriber(form: &FromData, pool: &PgPool) -> Result<(), sqlx::Error> {
+pub async fn insert_subscriber(
+    new_subscriber: &NewSubscriber,
+    pool: &PgPool,
+) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)
         VALUES ($1, $2, $3, $4)
         "#,
         uuid::Uuid::new_v4(),
-        form.email,
-        form.name,
+        new_subscriber.email,
+        new_subscriber.name.inner_ref(),
         Utc::now()
     )
     .execute(pool)
