@@ -20,8 +20,7 @@ async fn main() -> std::io::Result<()> {
     // 	.expect("Failed to create Postgres connection pool.");
     let connection_pool = PgPoolOptions::new()
         .acquire_timeout(std::time::Duration::from_secs(2))
-        .connect_lazy(&configuration.database.connection_string())
-        .expect("Failed to create Postgres connection pool.");
+        .connect_lazy_with(configuration.database.with_db());
     // We have removed the hard-coded `8000` - it's now coming from our settings.
     let address = format!(
         "{}:{}",
