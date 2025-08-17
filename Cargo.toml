@@ -36,6 +36,10 @@ serde-aux = "4.7"
 unicode-segmentation = "1.12"
 claims = "0.8"
 validator = "0.20"
+fake = "4.4"
+quickcheck = "1"
+quickcheck_macros = "1.1"
+rand = "0.9"
 
 [dependencies.sqlx]
 version = "0.8"
