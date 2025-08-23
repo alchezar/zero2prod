@@ -1,7 +1,3 @@
-// IKinder
-
-//! main.rs
-
 use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
 use zero2prod::lib::configurations::get_configuration;
@@ -20,6 +16,13 @@ async fn main() -> std::io::Result<()> {
     let connection_pool = PgPoolOptions::new()
         .acquire_timeout(std::time::Duration::from_secs(2))
         .connect_lazy_with(configuration.database.with_db());
+
+    // Build an `EmailClient` using configuration.
+    let email_client = configuration
+        .email_client
+        .try_into()
+        .expect("Invalid sender email address.");
+
     // We have removed the hard-coded `8000` - it's now coming from our settings.
     let address = format!(
         "{}:{}",
@@ -29,5 +32,5 @@ async fn main() -> std::io::Result<()> {
     // Bubble up the io::Error if we failed to bind the address
     // Otherwise call .await on our Server.
     let listener = TcpListener::bind(address)?;
-    run(listener, connection_pool)?.await
+    run(listener, connection_pool, email_client)?.await
 }

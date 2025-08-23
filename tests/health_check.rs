@@ -39,7 +39,14 @@ async fn spawn_app() -> TestApp {
     configuration.database.database_name = Uuid::new_v4().to_string();
     let connection_pool = configure_database(&configuration.database).await;
 
-    let server = run(listener, connection_pool.clone()).expect("Failed to bind address");
+    // Build a new email client.
+    let email_client = configuration
+        .email_client
+        .try_into()
+        .expect("Invalid sender email address.");
+
+    let server =
+        run(listener, connection_pool.clone(), email_client).expect("Failed to bind address");
     let _ = tokio::spawn(server);
 
     TestApp {

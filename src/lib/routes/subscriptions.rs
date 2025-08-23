@@ -1,6 +1,4 @@
-﻿// IKinder
-
-use crate::lib::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
+﻿use crate::lib::domain::{NewSubscriber, SubscriberEmail, SubscriberName};
 use actix_web::{HttpResponse, web};
 use chrono::Utc;
 use sqlx::PgPool;

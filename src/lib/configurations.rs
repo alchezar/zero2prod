@@ -1,5 +1,4 @@
-// IKinder
-
+use crate::lib::domain::SubscriberEmail;
 use secrecy::{ExposeSecret, SecretString};
 use serde_aux::field_attributes::deserialize_number_from_string;
 use sqlx::ConnectOptions;
@@ -9,6 +8,20 @@ use sqlx::postgres::{PgConnectOptions, PgSslMode};
 pub struct Setting {
     pub database: DatabaseSettings,
     pub application: ApplicationSettings,
+    pub email_client: EmailClientSettings,
+}
+
+#[derive(serde::Deserialize)]
+pub struct EmailClientSettings {
+    pub base_url: String,
+    pub sender_email: String,
+    pub authorization_token: SecretString,
+}
+
+impl EmailClientSettings {
+    pub fn sender(&self) -> Result<SubscriberEmail, String> {
+        SubscriberEmail::parse(&self.sender_email)
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -53,7 +66,7 @@ impl DatabaseSettings {
 
 pub fn get_configuration() -> Result<Setting, config::ConfigError> {
     let base_path = std::env::current_dir().expect("Failed to determine the current directory.");
-    let configuration_directory = base_path.join("configuration");
+    let conf_dir = base_path.join("configuration");
 
     // Detect the running environment. Default to `local` if unspecified.
     let environment: Environment = std::env::var("APP_ENVIRONMENT")
@@ -63,12 +76,8 @@ pub fn get_configuration() -> Result<Setting, config::ConfigError> {
     let environment_filename = format!("{}.yaml", environment.as_str());
 
     let settings = config::Config::builder()
-        .add_source(config::File::from(
-            configuration_directory.join("base.yaml"),
-        ))
-        .add_source(config::File::from(
-            configuration_directory.join(&environment_filename),
-        ))
+        .add_source(config::File::from(conf_dir.join("base.yaml")))
+        .add_source(config::File::from(conf_dir.join(&environment_filename)))
         .add_source(
             config::Environment::with_prefix("APP")
                 .prefix_separator("_")
