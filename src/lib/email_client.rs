@@ -3,7 +3,6 @@ use crate::lib::domain::SubscriberEmail;
 use actix_web::mime::APPLICATION_JSON;
 use reqwest::header::CONTENT_TYPE;
 use secrecy::{ExposeSecret, SecretString};
-use std::time::Duration;
 
 pub const POSTMARK_HEADER: &'static str = "X-Postmark-Server-Token";
 #[derive(serde::Serialize)]
@@ -29,7 +28,7 @@ impl EmailClient {
         base_url: String,
         sender: SubscriberEmail,
         authorization_token: SecretString,
-        timeout: Duration,
+        timeout: std::time::Duration,
     ) -> Self {
         let http_client = reqwest::Client::builder().timeout(timeout).build().unwrap();
 

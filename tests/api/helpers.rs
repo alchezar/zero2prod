@@ -1,9 +1,9 @@
 ﻿use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
-use std::net::TcpListener;
 use uuid::Uuid;
 use zero2prod::lib::configurations::{DatabaseSettings, get_configuration};
-use zero2prod::lib::startup::run;
+use zero2prod::lib::startup::Application;
+use zero2prod::lib::startup::get_connection_pool;
 use zero2prod::lib::telemetry::{get_subscriber, init_subscriber};
 
 // Ensure that the `tracing` stack is only initialised once using `once_cell`.
@@ -22,32 +22,45 @@ pub struct TestApp {
     pub db_pool: PgPool,
 }
 
+impl TestApp {
+    pub async fn post_subscriptions(&self, body: String) -> reqwest::Response {
+        reqwest::Client::new()
+            .post(&format!("{}/subscriptions", &self.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+            .await
+            .expect("Failed to execute request.")
+    }
+}
+
 pub async fn spawn_app() -> TestApp {
     // The first time `initialize` is invoked the code in `Tracing` is executed.
     // Al other invocations will
     Lazy::force(&TRACING);
 
-    let listener = TcpListener::bind("localhost:0").expect("Failed to bind random port");
-    let port = listener.local_addr().unwrap().port();
-    let address = format!("http://localhost:{}", port);
-
-    let mut configuration = get_configuration().expect("Failed to read configuration.");
-    configuration.database.database_name = Uuid::new_v4().to_string();
-    let connection_pool = configure_database(&configuration.database).await;
-
-    // Build a new email client.
-    let email_client = configuration
-        .email_client
-        .try_into()
-        .expect("Invalid sender email address.");
-
-    let server =
-        run(listener, connection_pool.clone(), email_client).expect("Failed to bind address");
-    let _ = tokio::spawn(server);
+    // Randomise configuration to ensure test isolation.
+    let configuration = {
+        let mut conf = get_configuration().expect("Failed to read configuration.");
+        // Use a different database for each test case.
+        conf.database.database_name = Uuid::new_v4().to_string();
+        // Use random OS port.
+        conf.application.port = 0;
+        conf
+    };
+    // Create and migrate the database.
+    configure_database(&configuration.database).await;
+    // Launch the application as a background task.
+    let application = Application::build(configuration.clone())
+        .await
+        .expect("Failed to build application");
+    // Get the port before spawning the application.
+    let address = format!("http://localhost:{}", application.port());
+    let _ = tokio::spawn(application.run_until_stopped());
 
     TestApp {
         address,
-        db_pool: connection_pool,
+        db_pool: get_connection_pool(&configuration),
     }
 }
 
