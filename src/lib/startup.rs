@@ -1,7 +1,7 @@
 ﻿use crate::greet;
 use crate::lib::configurations::Setting;
 use crate::lib::email_client::EmailClient;
-use crate::lib::routes::{health_check, subscribe};
+use crate::lib::routes::{confirm, health_check, subscribe};
 use actix_web::dev::Server;
 use actix_web::{App, HttpServer, web};
 use sqlx::PgPool;
@@ -30,19 +30,30 @@ impl Application {
         );
         let listener = TcpListener::bind(&address)?;
         let port = listener.local_addr()?.port();
-        let server = run(listener, connection_pool, email_client)?;
+        let server = run(
+            listener,
+            connection_pool,
+            email_client,
+            configuration.application.base_url,
+        )?;
 
         Ok(Self { port, server })
     }
-	pub fn port(&self) -> u16 {
-		self.port
-	}
+    pub fn port(&self) -> u16 {
+        self.port
+    }
     /// A more expressive name that makes it clear that this function only
     /// returns when the application is stopped.
     pub async fn run_until_stopped(self) -> Result<(), std::io::Error> {
         self.server.await
     }
 }
+
+// We need to define a wrapper type in order to retrieve the URL in the
+// `subscribe` handler.
+// Retrieval from the context, in actix-web, is type-based: using a raw `String`
+// would expose us to conflicts.
+pub struct ApplicationBaseUrl(pub String);
 
 pub fn get_connection_pool(configuration: &Setting) -> PgPool {
     PgPoolOptions::new()
@@ -56,9 +67,12 @@ pub fn run(
     listener: TcpListener,
     db_pool: PgPool,
     email_client: EmailClient,
+    base_url: String,
 ) -> Result<Server, std::io::Error> {
     let db_pool = web::Data::new(db_pool);
     let email_client = web::Data::new(email_client);
+    let base_url = web::Data::new(ApplicationBaseUrl(base_url));
+
     let server = HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
@@ -66,8 +80,10 @@ pub fn run(
             .route("/{name}", web::get().to(greet))
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscribe))
+            .route("/subscriptions/confirm", web::get().to(confirm))
             .app_data(web::Data::clone(&db_pool))
             .app_data(web::Data::clone(&email_client))
+            .app_data(web::Data::clone(&base_url))
     })
     .listen(listener)?
     .workers(4)

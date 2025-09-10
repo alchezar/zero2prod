@@ -18,8 +18,15 @@ static TRACING: Lazy<()> = Lazy::new(|| {
     };
 });
 
+/// Confirmation links embedded in the request to the email API.
+pub struct ConfirmationLinks {
+    pub html: reqwest::Url,
+    pub plain_text: reqwest::Url,
+}
+
 pub struct TestApp {
     pub address: String,
+    pub port: u16,
     pub db_pool: PgPool,
     pub email_server: MockServer,
 }
@@ -33,6 +40,33 @@ impl TestApp {
             .send()
             .await
             .expect("Failed to execute request.")
+    }
+
+    /// Extract the confirmation links embedded in the request to the email API.
+    pub fn get_confirmation_links(&self, email_request: &wiremock::Request) -> ConfirmationLinks {
+        // Parse the body as JSON, starting from raw bytes.
+        let body = serde_json::from_slice::<serde_json::Value>(&email_request.body).unwrap();
+        // Extract the link from one of the request fields.
+        let get_link = |s: &str| {
+            let links = linkify::LinkFinder::new()
+                .links(s)
+                .filter(|l| *l.kind() == linkify::LinkKind::Url)
+                .collect::<Vec<_>>();
+            assert_eq!(links.len(), 1);
+            let raw_link = links[0].as_str().to_owned();
+            let mut confirmation_link = reqwest::Url::parse(&raw_link).unwrap();
+            // Let's make sure we don't call random APIs on the web.
+            assert_eq!(confirmation_link.host_str().unwrap(), "localhost");
+            confirmation_link.set_port(Some(self.port)).unwrap();
+            confirmation_link
+        };
+
+        let html = get_link(&body["HtmlBody"].as_str().unwrap());
+        let plain_text = get_link(&body["TextBody"].as_str().unwrap());
+        // The two links should be identical.
+        assert_eq!(html, plain_text);
+
+        ConfirmationLinks { html, plain_text }
     }
 }
 
@@ -61,11 +95,13 @@ pub async fn spawn_app() -> TestApp {
         .await
         .expect("Failed to build application");
     // Get the port before spawning the application.
-    let address = format!("http://localhost:{}", application.port());
+    let application_port = application.port();
+    let address = format!("http://localhost:{}", application_port);
     let _ = tokio::spawn(application.run_until_stopped());
 
     TestApp {
         address,
+        port: application_port,
         db_pool: get_connection_pool(&configuration),
         email_server,
     }
