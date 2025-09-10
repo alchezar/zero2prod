@@ -18,18 +18,39 @@ async fn subscriptions_returns_200_for_valid_form_data() {
         .mount(&app.email_server)
         .await;
 
+    // Act
     let response = app.post_subscriptions(body.into()).await;
 
+    // Assert
     assert!(response.status().is_success());
     assert_eq!(response.status().as_u16(), 200);
+}
 
-    let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
+#[tokio::test]
+async fn subscribe_persists_the_new_subscriber() {
+    // Arrange
+    let app = spawn_app().await;
+    let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
+
+    Mock::given(any())
+        .and(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&app.email_server)
+        .await;
+
+    // Act
+    app.post_subscriptions(body.into()).await;
+
+    // Assert
+    let saved = sqlx::query!(r#"SELECT email, name, status FROM subscriptions"#)
         .fetch_one(&app.db_pool)
         .await
         .expect("Failed to fetch saved subscription");
 
     assert_eq!(saved.email, "ursula_le_guin@gmail.com");
     assert_eq!(saved.name, "le guin");
+	assert_eq!(saved.status, "pending_confirmation");
 }
 
 #[tokio::test]
@@ -96,5 +117,22 @@ async fn subscribe_sends_a_confirmation_email_for_valid_data() {
     app.post_subscriptions(body.into()).await;
 
     // Assert
-    // Mock asserts on drop
+    // Get the first intercepted request.
+    let email_request = &app.email_server.received_requests().await.unwrap()[0];
+    // Parse the body as JSON, starting from raw bytes.
+    let body = serde_json::from_slice::<serde_json::Value>(&email_request.body).unwrap();
+    // Extract the link from one of the request fields.
+    let get_link = |s: &str| {
+        let links = linkify::LinkFinder::new()
+            .links(s)
+            .filter(|l| *l.kind() == linkify::LinkKind::Url)
+            .collect::<Vec<_>>();
+        assert_eq!(links.len(), 1);
+        links[0].as_str().to_owned()
+    };
+
+    let html_link = get_link(&body["HtmlBody"].as_str().unwrap());
+    let text_link = get_link(&body["TextBody"].as_str().unwrap());
+    // The two links should be identical.
+    assert_eq!(html_link, text_link);
 }

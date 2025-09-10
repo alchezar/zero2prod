@@ -35,19 +35,10 @@ pub async fn subscribe(
         Err(_) => return HttpResponse::BadRequest().finish(),
     };
 
-    // Insert subscriber.
     if insert_subscriber(&new_subscriber, &pool).await.is_err() {
         return HttpResponse::InternalServerError().finish();
     }
-    // Send a (useless) email to the new subscriber.
-    // We are ignoring email delivery errors for now.
-    if email_client
-        .send_email(
-            new_subscriber.email,
-            "Welcome",
-            "Welcome to our newsletter",
-            "Welcome to our newsletter",
-        )
+    if send_confirmation_email(email_client, new_subscriber)
         .await
         .is_err()
     {
@@ -55,6 +46,31 @@ pub async fn subscribe(
     }
 
     HttpResponse::Ok().finish()
+}
+
+#[tracing::instrument(
+    name = "Send a confirmation email to a new subscriber",
+    skip(email_client, new_subscriber)
+)]
+pub async fn send_confirmation_email(
+    email_client: web::Data<EmailClient>,
+    new_subscriber: NewSubscriber,
+) -> Result<(), reqwest::Error> {
+    let confirmation_link = "https://there-is-no-such-domain.com/subscriptions/confirm";
+    let html_body = format!(
+        r#"Welcome to our newsletter!<br />
+		Click <a href="{}">here</a> to confirm your subscriptions"#,
+        confirmation_link
+    );
+    let plain_body = format!(
+        r#"Welcome to our newsletter!
+		Visit {} to confirm your subscriptions"#,
+        confirmation_link
+    );
+
+    email_client
+        .send_email(new_subscriber.email, "Welcome!", &html_body, &plain_body)
+        .await
 }
 
 #[tracing::instrument(
@@ -74,7 +90,7 @@ pub async fn insert_subscriber(
         new_subscriber.email.as_ref(),
         new_subscriber.name.as_ref(),
         Utc::now(),
-        "confirmed"
+        "pending_confirmation"
     )
     .execute(pool)
     .await

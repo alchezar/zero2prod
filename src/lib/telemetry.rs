@@ -38,7 +38,7 @@ pub fn init_subscriber(subscriber: impl Subscriber + Sync + Send) {
     // Redirect all `log`'s events to our subscriber.
     LogTracer::init().expect("Failed to set logger.");
 
-    // This method can be used by applications to specify whet subscriber should
+    // This method can be used by applications to specify when subscriber should
     // be used to process spans.
     set_global_default(subscriber).expect("Failed to set subscriber");
 }
